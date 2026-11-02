@@ -1,0 +1,5 @@
+error: `repr(i32)` attribute not specified
+  --> tests/compile_error_cases/missing_switch_attr.rs:12:1
+   |
+12 | enum Derived {
+   | ^^^^
