@@ -1,5 +1,5 @@
 [package]
-name = "xdrs_derive_test_suite"
+name = "xdrs_test_suite"
 authors = ["LazyMechanic <asharnrus@gmail.com>"]
 version = "0.0.0"
 edition = "2024"
@@ -7,8 +7,7 @@ publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-
 [dev-dependencies]
-xdrs = { path = "../xdrs" }
+xdrs = { path = "../xdrs", features = ["__test_utils"] }
 
 trybuild = "1.0.122"

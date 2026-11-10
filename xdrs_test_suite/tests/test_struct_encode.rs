@@ -1,8 +1,4 @@
-mod utils;
-
-use std::io::Write;
-
-use xdrs::{Encode, Error};
+use xdrs::{Encode, Encoder, test_utils::assert_encode_eq};
 
 #[test]
 fn empty() {
@@ -11,15 +7,15 @@ fn empty() {
 
     struct Manual {}
     impl Encode for Manual {
-        fn encode<W: Write>(&self, _out: &mut W) -> Result<usize, Error> {
-            Ok(0)
+        fn encode<E: Encoder>(&self, _encoder: &mut E) -> Result<(), E::Error> {
+            Ok(())
         }
     }
 
     let act = Derived {};
     let exp = Manual {};
 
-    utils::assert_pack_eq(act, exp);
+    assert_encode_eq(act, exp);
 }
 
 #[test]
@@ -37,12 +33,11 @@ fn common() {
         c: String,
     }
     impl Encode for Manual {
-        fn encode<W: Write>(&self, out: &mut W) -> Result<usize, Error> {
-            let mut write = 0;
-            write += self.a.encode(out)?;
-            write += self.b.encode(out)?;
-            write += self.c.encode(out)?;
-            Ok(write)
+        fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), E::Error> {
+            self.a.encode(encoder)?;
+            self.b.encode(encoder)?;
+            self.c.encode(encoder)?;
+            Ok(())
         }
     }
 
@@ -57,7 +52,7 @@ fn common() {
         c: "3".into(),
     };
 
-    utils::assert_pack_eq(act, exp);
+    assert_encode_eq(act, exp);
 }
 
 #[test]
@@ -78,12 +73,11 @@ fn generics() {
         c: &'a str,
     }
     impl<'a, A: Trait + Encode, B: Encode> Encode for Manual<'a, A, B> {
-        fn encode<W: Write>(&self, out: &mut W) -> Result<usize, Error> {
-            let mut wrote = 0;
-            wrote += self.a.encode(out)?;
-            wrote += self.b.encode(out)?;
-            wrote += self.c.encode(out)?;
-            Ok(wrote)
+        fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), E::Error> {
+            self.a.encode(encoder)?;
+            self.b.encode(encoder)?;
+            self.c.encode(encoder)?;
+            Ok(())
         }
     }
 
@@ -98,7 +92,7 @@ fn generics() {
         c: "3".into(),
     };
 
-    utils::assert_pack_eq(act, exp);
+    assert_encode_eq(act, exp);
 }
 
 #[test]
@@ -123,12 +117,11 @@ fn complex() {
         c: ManualB,
     }
     impl Encode for ManualA {
-        fn encode<W: Write>(&self, out: &mut W) -> Result<usize, Error> {
-            let mut write = 0;
-            write += self.a.encode(out)?;
-            write += self.b.encode(out)?;
-            write += self.c.encode(out)?;
-            Ok(write)
+        fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), E::Error> {
+            self.a.encode(encoder)?;
+            self.b.encode(encoder)?;
+            self.c.encode(encoder)?;
+            Ok(())
         }
     }
 
@@ -138,12 +131,11 @@ fn complex() {
         f: String,
     }
     impl Encode for ManualB {
-        fn encode<W: Write>(&self, out: &mut W) -> Result<usize, Error> {
-            let mut write = 0;
-            write += self.d.encode(out)?;
-            write += self.e.encode(out)?;
-            write += self.f.encode(out)?;
-            Ok(write)
+        fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), E::Error> {
+            self.d.encode(encoder)?;
+            self.e.encode(encoder)?;
+            self.f.encode(encoder)?;
+            Ok(())
         }
     }
 
@@ -166,5 +158,5 @@ fn complex() {
         },
     };
 
-    utils::assert_pack_eq(act, exp);
+    assert_encode_eq(act, exp);
 }

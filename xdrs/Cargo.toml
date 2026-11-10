@@ -11,8 +11,14 @@ categories = ["encoding", "parsing"]
 include = ["src/**/*.rs", "README.md", "LICENSE"]
 edition = "2024"
 
+
 [dependencies]
 xdrs_derive = { path = "../xdrs_derive" }
 
 bytes = "1.0"
 
+
+[features]
+default = []
+
+__test_utils = []

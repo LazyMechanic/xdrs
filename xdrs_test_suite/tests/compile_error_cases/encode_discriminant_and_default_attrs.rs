@@ -11,13 +11,13 @@ enum Discriminant {
 #[derive(Encode)]
 #[xdrs(switch = "Discriminant")]
 enum Derived {
-    #[xdrs(discriminant = "Int")]
+    #[xdrs(discriminant = "Discriminant::Int")]
     Int(i32),
-    #[xdrs(discriminant = "String")]
+    #[xdrs(discriminant = "Discriminant::String")]
     String(String),
-    #[xdrs(discriminant = "Void")]
+    #[xdrs(discriminant = "Discriminant::Void")]
     Void,
-    #[xdrs(default, discriminant = "Void")]
+    #[xdrs(default, discriminant = "Discriminant::Void")]
     Default,
 }
 

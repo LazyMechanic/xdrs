@@ -1,0 +1,5 @@
+error: to use a `#[xdrs(discriminant = "...")]` attribute on variants you must specify the discriminant type with `#[xdrs(switch)]` attribute on the enum
+  --> tests/compile_error_cases/encode_missing_switch_attr.rs:13:5
+   |
+13 |     #[xdrs(discriminant = "Discriminant::Int")]
+   |     ^

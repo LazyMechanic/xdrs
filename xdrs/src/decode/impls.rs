@@ -3,8 +3,11 @@ use std::{borrow::Cow, marker::PhantomData, mem::MaybeUninit};
 use bytes::Bytes;
 
 use crate::{
-    decode::{Decode, read::Read},
-    error::Error,
+    ExpectedSize,
+    decode::{
+        Decode, Reference,
+        decoder::{DecodeError, Decoder},
+    },
 };
 
 macro_rules! impl_primitive {
@@ -12,8 +15,8 @@ macro_rules! impl_primitive {
         $(
         impl<'a> Decode<'a> for $ty {
             #[inline]
-            fn decode<R: Read<'a>>(reader: &mut R) -> Result<(Self, usize), Error> {
-                reader.$f()
+            fn decode<D: Decoder<'a>>(decoder: &mut D) -> Result<Self, D::Error> {
+                decoder.$f()
             }
         }
         )*
@@ -21,111 +24,97 @@ macro_rules! impl_primitive {
 }
 
 impl_primitive!(
-    i32 => read_i32,
-    u32 => read_u32,
-    i64 => read_i64,
-    u64 => read_u64,
-    f32 => read_f32,
-    f64 => read_f64,
-    bool => read_bool,
+    i32 => decode_int,
+    u32 => decode_uint,
+    i64 => decode_hyper,
+    u64 => decode_uhyper,
+    f32 => decode_f32,
+    f64 => decode_f64,
+    bool => decode_bool,
 );
 
 impl<'d: 'a, 'a> Decode<'d> for &'a [u8] {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let mut read = 0;
-
-        let (sz, n) = read_size(reader)?;
-        read += n;
-
-        let (slice, n) = read_bytes_var(reader, sz)?;
-        read += n;
-
-        Ok((slice, read))
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        match decoder.decode_opaque_var(None)? {
+            Reference::Borrowed(v) => Ok(v),
+            Reference::Copied(_) => Err(D::Error::expected_borrowed()),
+        }
     }
 }
 
 impl<'d> Decode<'d> for Vec<u8> {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let (slice, n) = <&[u8] as Decode>::decode(reader)?;
-        Ok((slice.to_vec(), n))
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        decoder
+            .decode_opaque_var(None)
+            .map(|v| Vec::from(v.as_ref()))
     }
 }
 
 impl<'d, const N: usize> Decode<'d> for [u8; N] {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        read_bytes_fix(reader)
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        let slice = decoder.decode_opaque_fix(N)?;
+        let slice = slice.as_ref();
+        check_size(slice.len(), ExpectedSize::Exact(N))?;
+
+        let mut arr = [0; N];
+        // SAFETY: decode_opaque_fix(N) returns exactly N bytes.
+        unsafe {
+            core::ptr::copy_nonoverlapping(slice.as_ptr(), arr.as_mut_ptr(), N)
+        };
+
+        Ok(arr)
     }
 }
 
 impl<'d: 'a, 'a> Decode<'d> for &'a str {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let (v, sz) = <&[u8] as Decode>::decode(reader)?;
-        if !v.is_ascii() {
-            return Err(Error::invalid_value(
-                "not ASCII string",
-                "valid ASCII string",
-            ));
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        match decoder.decode_string(None)? {
+            Reference::Borrowed(v) => Ok(v),
+            Reference::Copied(_) => Err(D::Error::expected_borrowed()),
         }
-
-        // SAFETY: ASCII is a subset of UTF-8. If string is valid ASCII then
-        // it is valid UTF-8. This check was performed above.
-        let s = unsafe { str::from_utf8_unchecked(v) };
-        Ok((s, sz))
     }
 }
 
 impl<'d> Decode<'d> for String {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let (s, sz) = <&str as Decode>::decode(reader)?;
-        Ok((String::from(s), sz))
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        decoder
+            .decode_string(None)
+            .map(|v| String::from(v.as_ref()))
     }
 }
 
 impl<'d, T: Decode<'d>, const N: usize> Decode<'d> for [T; N] {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        read_seq_fix(reader)
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        read_seq_fix(decoder)
     }
 }
 
 impl<'d, T: Decode<'d>> Decode<'d> for Vec<T> {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let mut read = 0;
-
-        let (sz, n) = read_size(reader)?;
-        read += n;
-
-        let (vec, n) = read_seq_var(reader, sz)?;
-        read += n;
-
-        Ok((vec, read))
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        read_seq_var(decoder, None)
     }
 }
 
 impl<'d> Decode<'d> for Bytes {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let (vec, read) = Vec::<u8>::decode(reader)?;
-        Ok((Bytes::from(vec), read))
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        Vec::<u8>::decode(decoder).map(Bytes::from)
     }
 }
 
 impl<'d, T: Decode<'d>> Decode<'d> for Option<T> {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let (have, mut sz) = bool::decode(reader)?;
-        let ret = if have {
-            let (v, osz) = T::decode(reader)?;
-            sz += osz;
-            Some(v)
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        let have = bool::decode(decoder)?;
+        if have {
+            Ok(Some(T::decode(decoder)?))
         } else {
-            None
-        };
-        Ok((ret, sz))
+            Ok(None)
+        }
     }
 }
 
 impl<'d, T: Decode<'d>> Decode<'d> for Box<T> {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let (b, sz) = T::decode(reader)?;
-        Ok((Box::new(b), sz))
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        T::decode(decoder).map(Box::new)
     }
 }
 
@@ -134,41 +123,39 @@ where
     T: ?Sized + ToOwned,
     T::Owned: Decode<'d>,
 {
-    fn decode<R: Read<'d>>(reader: &mut R) -> Result<(Self, usize), Error> {
-        let (b, sz) = T::Owned::decode(reader)?;
-        Ok((Cow::Owned(b), sz))
+    fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
+        T::Owned::decode(decoder).map(Cow::Owned)
     }
 }
 
 impl<'a> Decode<'a> for () {
     #[inline]
-    fn decode<R: Read<'a>>(_reader: &mut R) -> Result<(Self, usize), Error> {
-        Ok(((), 0))
+    fn decode<D: Decoder<'a>>(_decoder: &mut D) -> Result<Self, D::Error> {
+        Ok(())
     }
 }
 
 impl<'a, T> Decode<'a> for PhantomData<T> {
     #[inline]
-    fn decode<R: Read<'a>>(_reader: &mut R) -> Result<(Self, usize), Error> {
-        Ok((Default::default(), 0))
+    fn decode<D: Decoder<'a>>(_decoder: &mut D) -> Result<Self, D::Error> {
+        Ok(Default::default())
     }
 }
 
-#[inline]
-fn read_size<'d, R>(reader: &mut R) -> Result<(usize, usize), Error>
+fn read_seq_fix<'d, D, T, const N: usize>(
+    decoder: &mut D,
+) -> Result<[T; N], D::Error>
 where
-    R: Read<'d>,
-{
-    u32::decode(reader).map(|(sz, n)| (sz as usize, n))
-}
-
-fn read_seq_fix<'d, R, T, const N: usize>(
-    reader: &mut R,
-) -> Result<([T; N], usize), Error>
-where
-    R: Read<'d>,
+    D: Decoder<'d>,
     T: Decode<'d>,
 {
+    const {
+        assert!(
+            N <= u32::MAX as usize,
+            "XDR fix length type size cannot exceed (2**32)-1"
+        );
+    };
+
     struct Guard<'a, I> {
         array_mut: &'a mut [MaybeUninit<I>],
         initialized: usize,
@@ -205,7 +192,6 @@ where
         }
     }
 
-    let mut read = 0;
     let mut arr = [const { MaybeUninit::uninit() }; N];
 
     let mut guard = Guard {
@@ -213,12 +199,12 @@ where
         initialized: 0,
     };
     while guard.initialized < guard.array_mut.len() {
-        let (item, n) = T::decode(reader)?;
-        read += n;
+        let item = T::decode(decoder)?;
 
         // SAFETY: The loop condition ensures we have space to push the item
         unsafe { guard.push_unchecked(item) };
     }
+
     std::mem::forget(guard);
 
     // SAFETY: Array fully initialized above
@@ -227,93 +213,68 @@ where
         std::ptr::read(ptr)
     };
 
-    Ok((arr, read))
+    Ok(arr)
 }
 
-fn read_seq_var<'d, R, T>(
-    reader: &mut R,
-    sz: usize,
-) -> Result<(Vec<T>, usize), Error>
+pub fn read_seq_var<'d, D, T>(
+    decoder: &mut D,
+    maxlen: Option<usize>,
+) -> Result<Vec<T>, D::Error>
 where
-    R: Read<'d>,
+    D: Decoder<'d>,
     T: Decode<'d>,
 {
     const MAX_RESERVED_SIZE: usize = 1024; // 1024 elements
 
-    let mut read = 0;
+    let len = decoder.decode_uint().map(|v| v as usize)?;
+    if let Some(maxlen) = maxlen {
+        check_size(len, ExpectedSize::Max(maxlen))?
+    }
 
-    let mut vec = Vec::with_capacity(usize::min(sz, MAX_RESERVED_SIZE));
-    for _ in 0..sz {
-        let (item, n) = T::decode(reader)?;
-        read += n;
+    let mut vec = Vec::with_capacity(usize::min(len, MAX_RESERVED_SIZE));
+    for _ in 0..len {
+        let item = T::decode(decoder)?;
 
         vec.push(item);
     }
 
-    Ok((vec, read))
+    Ok(vec)
 }
 
 #[inline]
-fn read_bytes_fix<'d, R, const N: usize>(
-    reader: &mut R,
-) -> Result<([u8; N], usize), Error>
-where
-    R: Read<'d>,
-{
-    let (slice, n) = reader.read_bytes(N)?;
-
-    let mut arr = [0; N];
-    // SAFETY: read_bytes(N) returns exactly N bytes.
-    unsafe {
-        core::ptr::copy_nonoverlapping(slice.as_ptr(), arr.as_mut_ptr(), N)
-    };
-
-    Ok((arr, n))
-}
-
-#[inline]
-fn read_bytes_var<'d, R>(
-    reader: &mut R,
+pub(crate) fn check_size<E: DecodeError>(
     len: usize,
-) -> Result<(&'d [u8], usize), Error>
-where
-    R: Read<'d>,
-{
-    reader.read_bytes(len)
+    explen: ExpectedSize,
+) -> Result<(), E> {
+    match explen {
+        ExpectedSize::Exact(e) if len != e => Err(E::invalid_size(len, explen)),
+        ExpectedSize::Max(e) if len > e => Err(E::invalid_size(len, explen)),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fmt::Debug;
 
     use super::*;
-    use crate::decode::read::SliceRead;
-
-    #[track_caller]
-    fn assert_decode<'d, T: Decode<'d> + PartialEq + Debug>(
-        val: &'d [u8],
-        exp: (T, usize),
-    ) {
-        let mut reader = SliceRead::new(val);
-        assert_eq!(T::decode(&mut reader).unwrap(), exp);
-    }
+    use crate::test_utils::assert_decode;
 
     #[rustfmt::skip]
     #[test]
     fn numbers() {
-        assert_decode::<i32>(&[0x00, 0x00, 0x00, 0x2A], (42, 4));
-        assert_decode::<i32>(&[0xFF, 0xFF, 0xFF, 0xD6], (-42, 4));
-        assert_decode::<u32>(&[0x00, 0x00, 0x00, 0x2A], (42, 4));
+        assert_decode::<i32>(&[0x00, 0x00, 0x00, 0x2A], 42);
+        assert_decode::<i32>(&[0xFF, 0xFF, 0xFF, 0xD6], -42);
+        assert_decode::<u32>(&[0x00, 0x00, 0x00, 0x2A], 42);
 
-        assert_decode::<i64>(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2A], (42, 8));
-        assert_decode::<i64>(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xD6], (-42, 8));
-        assert_decode::<u64>(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2A], (42, 8));
+        assert_decode::<i64>(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2A], 42);
+        assert_decode::<i64>(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xD6], -42);
+        assert_decode::<u64>(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2A], 42);
 
-        assert_decode::<f32>(&[0x42, 0x29, 0xAE, 0x14], (42.42, 4));
-        assert_decode::<f64>(&[0x40, 0x45, 0x35, 0xC2, 0x8F, 0x5C, 0x28, 0xF6], (42.42, 8));
+        assert_decode::<f32>(&[0x42, 0x29, 0xAE, 0x14], 42.42);
+        assert_decode::<f64>(&[0x40, 0x45, 0x35, 0xC2, 0x8F, 0x5C, 0x28, 0xF6], 42.42);
 
-        assert_decode::<bool>(&[0x00, 0x00, 0x00, 0x00], (false, 4));
-        assert_decode::<bool>(&[0x00, 0x00, 0x00, 0x01], (true, 4));
+        assert_decode::<bool>(&[0x00, 0x00, 0x00, 0x00], false);
+        assert_decode::<bool>(&[0x00, 0x00, 0x00, 0x01], true);
     }
 
     #[rustfmt::skip]
@@ -323,16 +284,16 @@ mod tests {
             0x00, 0x00, 0x00, 0x05,       // size
             0x00, 0x01, 0x02, 0x03, 0xFF, // [0..5]
             0x00, 0x00, 0x00,             // padding
-        ], (vec![0x00, 0x01, 0x02, 0x03, 0xFF], 12));
+        ], vec![0x00, 0x01, 0x02, 0x03, 0xFF]);
         assert_decode::<Bytes>(&[
             0x00, 0x00, 0x00, 0x05,       // size
             0x00, 0x01, 0x02, 0x03, 0xFF, // [0..5]
             0x00, 0x00, 0x00,             // padding
-        ], (Bytes::from_static(&[0x00, 0x01, 0x02, 0x03, 0xFF]), 12));
+        ], Bytes::from_static(&[0x00, 0x01, 0x02, 0x03, 0xFF]));
         assert_decode::<[u8; 5]>(&[
             0x00, 0x01, 0x02, 0x03, 0xFF, // [0..5]
             0x00, 0x00, 0x00,             // padding
-        ], ([0x00, 0x01, 0x02, 0x03, 0xFF], 8));
+        ], [0x00, 0x01, 0x02, 0x03, 0xFF]);
     }
 
     #[rustfmt::skip]
@@ -342,11 +303,11 @@ mod tests {
             0x00, 0x00, 0x00, 0x02, // size
             0x00, 0x00, 0x00, 0x2A, // [0]
             0x00, 0x00, 0x00, 0x2A, // [1]
-        ], (vec![42, 42], 12));
+        ], vec![42, 42]);
         assert_decode::<[i32; 2]>(&[
             0x00, 0x00, 0x00, 0x2A, // [0]
             0x00, 0x00, 0x00, 0x2A, // [1]
-        ], ([42, 42], 8));
+        ], [42, 42]);
     }
 
     #[rustfmt::skip]
@@ -355,38 +316,38 @@ mod tests {
         assert_decode::<Option<i32>>(&[
             0x00, 0x00, 0x00, 0x01, // enum tag (Some(_))
             0x00, 0x00, 0x00, 0x2A, // value
-        ], (Some(42), 8));
+        ], Some(42));
         assert_decode::<Option<i32>>(&[
             0x00, 0x00, 0x00, 0x00, // enum tag (None)
-        ], (None, 4));
+        ], None);
 
         assert_decode::<String>(&[
             0x00, 0x00, 0x00, 0x03, // size
             0x31, 0x32, 0x33,       // "123"
             0x00,                   // padding
-        ], (String::from("123"), 8));
+        ], String::from("123"));
 
         assert_decode::<Cow<'_, str>>(&[
             0x00, 0x00, 0x00, 0x03, // size
             0x31, 0x32, 0x33,       // "123"
             0x00,                   // padding
-        ], (Cow::Owned(String::from("123")), 8));
+        ], Cow::Owned(String::from("123")));
         assert_decode::<Cow<'_, [u8]>>(&[
             0x00, 0x00, 0x00, 0x05,       // size
             0x00, 0x01, 0x02, 0x03, 0xFF, // [0..5]
             0x00, 0x00, 0x00,             // padding
-        ], (Cow::Owned(vec![0x00, 0x01, 0x02, 0x03, 0xFF]), 12));
+        ], Cow::Owned(vec![0x00, 0x01, 0x02, 0x03, 0xFF]));
         assert_decode::<Cow<'_, [i32]>>(&[
             0x00, 0x00, 0x00, 0x02, // size
             0x00, 0x00, 0x00, 0x2A, // [0]
             0x00, 0x00, 0x00, 0x2A, // [1]
-        ], (Cow::Owned(vec![42, 42]), 12));
+        ], Cow::Owned(vec![42, 42]));
 
         assert_decode::<Box<i32>>(&[
             0x00, 0x00, 0x00, 0x2A, // value
-        ], (Box::new(42), 4));
+        ], Box::new(42));
 
-        assert_decode::<PhantomData<i32>>(&[], (PhantomData::default(), 0));
-        assert_decode::<()>(&[], ((), 0));
+        assert_decode::<PhantomData<i32>>(&[], PhantomData::default());
+        assert_decode::<()>(&[], ());
     }
 }

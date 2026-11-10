@@ -1,5 +1,0 @@
-error: exactly one of the following attributes must be specified: `#[xdrs(discriminant = "...")]` or `#[xdrs(default)]`
-  --> tests/compile_error_cases/discriminant_and_default_attrs.rs:20:5
-   |
-20 |     #[xdrs(default, discriminant = "Void")]
-   |     ^

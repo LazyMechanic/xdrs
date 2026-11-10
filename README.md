@@ -11,6 +11,11 @@ Rust implementation of XDR [RFC 4506](https://www.rfc-editor.org/info/rfc4506) f
 xdrs = "0.1"
 ```
 
+#### Roadmap
+
+- [ ] `trait Schema`
+- [ ] `struct TraceDecoder`
+
 #### License
 
 <sup>

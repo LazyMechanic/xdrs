@@ -1,0 +1,5 @@
+error: missing required `#[xdrs(discriminant)]` or `#[xdrs(default)]` attribute
+  --> tests/compile_error_cases/encode_missing_discriminant_attr.rs:18:5
+   |
+18 |     Void,
+   |     ^^^^
