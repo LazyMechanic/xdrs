@@ -1,0 +1,5 @@
+error: enum with value must contain at least one variant with `#[xdrs(discriminant = "...")]` attribute
+ --> tests/compile_error_cases/decode_enum_union_with_only_default.rs:4:1
+  |
+4 | #[xdrs(switch = "i32")]
+  | ^

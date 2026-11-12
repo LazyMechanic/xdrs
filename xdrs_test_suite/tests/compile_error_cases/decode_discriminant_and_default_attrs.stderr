@@ -1,0 +1,5 @@
+error: only one attribute either `#[xdrs(discriminant)]` or `#[xdrs(default)]` allowed
+  --> tests/compile_error_cases/decode_discriminant_and_default_attrs.rs:20:5
+   |
+20 |     #[xdrs(default, discriminant = "Discriminant::Void")]
+   |     ^

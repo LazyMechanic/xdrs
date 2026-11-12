@@ -1,0 +1,13 @@
+error: enum with discriminants must contain at least one variant
+ --> tests/compile_error_cases/encode_empty_enum_discriminant.rs:4:1
+  |
+4 | #[repr(i32)]
+  | ^
+
+error[E0084]: unsupported representation for zero-variant enum
+ --> tests/compile_error_cases/encode_empty_enum_discriminant.rs:4:8
+  |
+4 | #[repr(i32)]
+  |        ^^^
+5 | enum Enum {}
+  | --------- zero-variant enum

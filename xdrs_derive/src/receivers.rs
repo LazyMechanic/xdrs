@@ -84,7 +84,7 @@ impl TryFrom<SpannedValue<VariantReceiver>> for DiscriminantVariantReceiver {
             return Err(syn::Error::new(
                 span,
                 "to use a `#[xdrs(discriminant = \"...\")]` attribute on variants you must \
-                specify the discriminant type with `#[xdrs(switch)]` attribute on the enum",
+                specify the discriminant type with `#[xdrs(switch = \"...\")]` attribute on the enum",
             ));
         }
 
@@ -92,7 +92,7 @@ impl TryFrom<SpannedValue<VariantReceiver>> for DiscriminantVariantReceiver {
             return Err(syn::Error::new(
                 span,
                 "to use a `#[xdrs(default)` attribute on variants you must \
-                specify the discriminant type with `#[xdrs(switch)]` attribute on the enum",
+                specify the discriminant type with `#[xdrs(switch = \"...\")]` attribute on the enum",
             ));
         }
 

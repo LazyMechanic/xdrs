@@ -14,7 +14,8 @@ use crate::{
         VariantReceiver,
     },
     utils::{
-        check_enum_discriminant_attrs, check_enum_union_attrs,
+        check_enum_discriminant_attrs, check_enum_discriminant_has_variants,
+        check_enum_union_attrs, check_enum_union_has_variants,
         check_no_generics, check_repr_i32, check_struct_attrs,
         check_struct_is_struct,
     },
@@ -217,7 +218,7 @@ fn impl_union(
                 return Ok(quote! {
                     x if x == (#discriminant_expr as i32) => {
                         _xdrs::macro_reexport::Result::Ok(Self :: #variant_ident)
-                    },
+                    }
                 });
             }
 
@@ -336,7 +337,7 @@ fn validate_impl_struct(
     input: &SpannedValue<DeriveReceiver>,
     data: &darling::ast::Fields<SpannedValue<FieldReceiver>>,
 ) -> syn::Result<()> {
-    check_struct_is_struct(data)?;
+    check_struct_is_struct(input, data)?;
     check_struct_attrs(input, data)?;
 
     Ok(())
@@ -348,6 +349,7 @@ fn validate_impl_enum(
 ) -> syn::Result<()> {
     check_repr_i32(&input)?;
     check_no_generics(&input.generics)?;
+    check_enum_discriminant_has_variants(input, data)?;
     check_enum_discriminant_attrs(input, data)?;
 
     Ok(())
@@ -357,6 +359,7 @@ fn validate_impl_union(
     input: &SpannedValue<DeriveReceiver>,
     data: &[SpannedValue<VariantReceiver>],
 ) -> syn::Result<()> {
+    check_enum_union_has_variants(input, data)?;
     check_enum_union_attrs(input, data)?;
 
     Ok(())

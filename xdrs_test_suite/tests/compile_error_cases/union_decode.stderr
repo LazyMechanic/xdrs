@@ -1,0 +1,5 @@
+error: Unions are not supported
+ --> tests/compile_error_cases/union_decode.rs:4:1
+  |
+4 | union IntOrFloat {
+  | ^^^^^

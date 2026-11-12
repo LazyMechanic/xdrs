@@ -28,6 +28,14 @@ pub fn assert_encode_err<A: Encode>(value: A) {
 }
 
 #[track_caller]
+pub fn assert_encode<T: Encode>(actual: T, expected: &[u8]) {
+    let mut writer = StdEncoder::new(Vec::new());
+    T::encode(&actual, &mut writer).unwrap();
+
+    assert_eq!(writer.into_inner(), expected, "encoded value doesn't match");
+}
+
+#[track_caller]
 pub fn assert_decode<'d, T: Decode<'d> + PartialEq + Debug>(
     input: &'d [u8],
     expected: T,
@@ -46,11 +54,26 @@ pub fn assert_decode<'d, T: Decode<'d> + PartialEq + Debug>(
 }
 
 #[track_caller]
-pub fn assert_encode<T: Encode>(actual: T, expected: &[u8]) {
-    let mut writer = StdEncoder::new(Vec::new());
-    T::encode(&actual, &mut writer).unwrap();
+pub fn assert_decode_eq<'d, R, T>(reference_encoded: R, expected: T)
+where
+    T: for<'a> Decode<'a> + PartialEq + Debug,
+    R: Encode,
+{
+    let mut encoder = StdEncoder::new(Vec::new());
+    reference_encoded.encode(&mut encoder).unwrap();
 
-    assert_eq!(writer.into_inner(), expected, "encoded value doesn't match");
+    let encoded = encoder.into_inner();
+    let mut decoder = TestSliceDecoder::new(&encoded);
+
+    let actual = T::decode(&mut decoder).unwrap();
+    assert_eq!(actual, expected, "decoded value doesn't match");
+
+    let expected_read_len = decoder.len();
+    let actual_read_len = decoder.read_len();
+    assert_eq!(
+        actual_read_len, expected_read_len,
+        "read length doesn't match"
+    );
 }
 
 ///////

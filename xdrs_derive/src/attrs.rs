@@ -1,7 +1,6 @@
 use std::ops::Deref;
 
 use darling::FromMeta;
-use syn::Meta;
 
 /// `#[xdrs(switch = "path::to::Enum")]`
 #[derive(Debug, Clone)]

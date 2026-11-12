@@ -1,0 +1,5 @@
+error: `#[repr(i32)]` attribute not specified
+ --> tests/compile_error_cases/encode_missing_repr_i32.rs:4:1
+  |
+4 | enum Discriminant {
+  | ^^^^

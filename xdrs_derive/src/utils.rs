@@ -1,9 +1,5 @@
-use std::ops::Deref;
-
 use darling::util::SpannedValue;
-use proc_macro2::{Span, TokenStream};
-use quote::quote;
-use syn::{Generics, Pat, parse_quote, spanned::Spanned};
+use syn::{Generics, spanned::Spanned};
 
 use crate::receivers::{
     DeriveReceiver, DiscriminantVariantReceiver, FieldReceiver, VariantReceiver,
@@ -15,7 +11,10 @@ pub fn check_repr_i32(input: &SpannedValue<DeriveReceiver>) -> syn::Result<()> {
         .iter()
         .find(|a| a.meta.path().is_ident("repr"))
         .ok_or_else(|| {
-            syn::Error::new(input.span(), "`repr(i32)` attribute not specified")
+            syn::Error::new(
+                input.span(),
+                "`#[repr(i32)]` attribute not specified",
+            )
         })?;
 
     let mut repr_i32 = false;
@@ -54,11 +53,12 @@ pub fn check_no_generics(generics: &Generics) -> syn::Result<()> {
 }
 
 pub fn check_struct_is_struct(
+    input: &SpannedValue<DeriveReceiver>,
     data: &darling::ast::Fields<SpannedValue<FieldReceiver>>,
 ) -> syn::Result<()> {
     if !data.style.is_struct() {
         return Err(syn::Error::new(
-            Span::call_site(),
+            input.span(),
             "only structs with named fields are supported",
         ));
     }
@@ -156,6 +156,46 @@ pub fn check_enum_discriminant_attrs(
         return Err(syn::Error::new(
             input.span(),
             "unsupported attribute in enum with discriminants",
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn check_enum_union_has_variants(
+    input: &SpannedValue<DeriveReceiver>,
+    data: &[SpannedValue<VariantReceiver>],
+) -> syn::Result<()> {
+    // If no variants
+    if data.is_empty() {
+        return Err(syn::Error::new(
+            input.span(),
+            "enum with value must contain at least one variant with `#[xdrs(discriminant = \"...\")]` attribute",
+        ));
+    }
+
+    // If there are only one variant but without `#[xdrs(discriminant = "...")]` attribute
+    if data.len() == 1
+        && let Some(d) = data.first()
+        && d.discriminant_attr.is_none()
+    {
+        return Err(syn::Error::new(
+            input.span(),
+            "enum with value must contain at least one variant with `#[xdrs(discriminant = \"...\")]` attribute",
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn check_enum_discriminant_has_variants(
+    input: &SpannedValue<DeriveReceiver>,
+    data: &[SpannedValue<DiscriminantVariantReceiver>],
+) -> syn::Result<()> {
+    if data.is_empty() {
+        return Err(syn::Error::new(
+            input.span(),
+            "enum with discriminants must contain at least one variant",
         ));
     }
 
