@@ -1,6 +1,8 @@
-mod bounded;
 pub mod decode;
 pub mod encode;
+
+mod bounded;
+mod discriminant;
 mod error;
 
 #[cfg(any(test, feature = "__test_utils"))]
@@ -8,7 +10,7 @@ pub mod test_utils;
 
 use std::fmt::{Display, Formatter};
 
-pub use xdrs_derive::{Decode, Encode};
+pub use xdrs_derive::{Decode, Discriminant, Encode};
 
 pub use crate::{
     bounded::Bounded,
@@ -16,6 +18,7 @@ pub use crate::{
         Decode, DecodeError, DecodeOwned, Decoder, StdDecoder, from_reader,
         from_slice,
     },
+    discriminant::Discriminant,
     encode::{Encode, EncodeError, Encoder, StdEncoder, to_vec, to_writer},
     error::Error,
 };
@@ -57,7 +60,7 @@ impl ExpectedSize {
 
 #[doc(hidden)]
 pub mod macro_reexport {
-    pub use core::{option::Option, result::Result, stringify};
+    pub use core::{option::Option, result::Result};
     pub use std::io::Write;
 }
 
