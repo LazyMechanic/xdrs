@@ -1,6 +1,6 @@
 use darling::util::SpannedValue;
 use proc_macro2::TokenStream;
-use quote::{ToTokens, format_ident, quote};
+use quote::{ToTokens, format_ident, quote, quote_spanned};
 use syn::{
     GenericParam, Lifetime, LifetimeParam, Token,
     parse::{Parse, ParseStream},
@@ -148,20 +148,36 @@ fn impl_enum(
             #[allow(non_upper_case_globals)]
             const #const_ident: i32 = unsafe { *(&#ident :: #variant_ident as *const #ident as *const i32) };
         });
-    let match_branches = const_idents.zip(variant_idents).map(|(const_ident, variant_ident)| quote! {
+    let decode_match_branches = const_idents.clone().zip(variant_idents.clone()).map(|(const_ident, variant_ident)| quote! {
         x if x == #const_ident => _xdrs::macro_reexport::Result::Ok(Self :: #variant_ident)
+    });
+
+    let discriminant_match_branches = const_idents.zip(variant_idents).map(|(const_ident, variant_ident)| quote! {
+        x if x == #const_ident => _xdrs::macro_reexport::Result::Ok((_xdrs::macro_reexport::Option::Some(Self :: #variant_ident), x))
     });
 
     Ok(quote! {
         const _: () = {
             extern crate xdrs as _xdrs;
+
+            #( #const_def )*
+
             impl #impl_gen _xdrs::Decode<#decode_lt> for #ident #type_gen #where_gen {
                 fn decode<__D: _xdrs::Decoder<#decode_lt>>(decoder: &mut __D) -> _xdrs::macro_reexport::Result<Self, __D::Error> {
-                    #(#const_def)*
-                    let v: i32 = _xdrs::Decode::decode(decoder)?;
-                    match v {
-                        #( #match_branches, )*
+                    let discriminant: i32 = _xdrs::Decode::decode(decoder)?;
+                    match discriminant {
+                        #( #decode_match_branches, )*
                         unknown => _xdrs::macro_reexport::Result::Err(<__D::Error as _xdrs::decode::DecodeError>::unknown_variant(unknown)),
+                    }
+                }
+            }
+
+            impl #impl_gen _xdrs::DecodeDiscriminant<#decode_lt> for #ident #type_gen #where_gen {
+                fn decode_discriminant<__D: _xdrs::Decoder<#decode_lt>>(decoder: &mut __D) -> _xdrs::macro_reexport::Result<(_xdrs::macro_reexport::Option<Self>, i32), __D::Error> {
+                    let discriminant: i32 = _xdrs::Decode::decode(decoder)?;
+                    match discriminant {
+                        #( #discriminant_match_branches, )*
+                        unknown => _xdrs::macro_reexport::Result::Ok((_xdrs::macro_reexport::Option::None, unknown)),
                     }
                 }
             }
@@ -216,7 +232,7 @@ fn impl_union(
             // Decode void (noop)
             if v.fields.is_unit() {
                 return Ok(quote! {
-                    x if x == (#discriminant_expr as i32) => {
+                    (_xdrs::macro_reexport::Option::Some(#discriminant_expr), _) => {
                         _xdrs::macro_reexport::Result::Ok(Self :: #variant_ident)
                     }
                 });
@@ -225,7 +241,7 @@ fn impl_union(
             // Decode type
             if v.fields.fields.first().is_some() {
                 return Ok(quote! {
-                    x if x == (#discriminant_expr as i32) => {
+                    (_xdrs::macro_reexport::Option::Some(#discriminant_expr), _) => {
                         _xdrs::macro_reexport::Result::Ok(Self :: #variant_ident ( _xdrs::Decode::decode(decoder)? ))
                     }
                 });
@@ -265,7 +281,7 @@ fn impl_union(
         Box::new(match_branches.into_iter())
     } else {
         Box::new(match_branches.into_iter().chain(std::iter::once(quote! {
-            unknown => {
+            (_, unknown) => {
                 _xdrs::macro_reexport::Result::Err(<__D::Error as _xdrs::decode::DecodeError>::unknown_variant(unknown))
             }
         })))
@@ -274,10 +290,11 @@ fn impl_union(
     Ok(quote! {
         const _: () = {
             extern crate xdrs as _xdrs;
+
             impl #impl_gen _xdrs::Decode<#decode_lt> for #ident #type_gen #where_gen {
                 fn decode<__D: _xdrs::Decoder<#decode_lt>>(decoder: &mut __D) -> _xdrs::macro_reexport::Result<Self, __D::Error> {
-                    let v: i32 = _xdrs::Decode::decode(decoder)?;
-                    match v {
+                    let (discriminant_repr, discriminant): (_xdrs::macro_reexport::Option<#discriminant_ty>, _) = _xdrs::DecodeDiscriminant::decode_discriminant(decoder)?;
+                    match (discriminant_repr, discriminant) {
                         #( #match_branches, )*
                     }
                 }

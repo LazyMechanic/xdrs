@@ -1,0 +1,16 @@
+error[E0277]: the trait bound `Discriminant: DecodeDiscriminant<'_>` is not satisfied
+  --> tests/compile_error_cases/decode_union_missing_decode_discriminant.rs:22:10
+   |
+22 | #[derive(Decode)]
+   |          ^^^^^^ unsatisfied trait bound
+   |
+help: the trait `DecodeDiscriminant<'_>` is not implemented for `Discriminant`
+  --> tests/compile_error_cases/decode_union_missing_decode_discriminant.rs:4:1
+   |
+ 4 | enum Discriminant {
+   | ^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `DecodeDiscriminant<'d>`:
+             bool
+             i32
+             u32
+   = note: this error originates in the derive macro `Decode` (in Nightly builds, run with -Z macro-backtrace for more info)

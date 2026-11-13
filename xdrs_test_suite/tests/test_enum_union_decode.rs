@@ -332,7 +332,7 @@ fn discriminant_i32() {
 
 #[test]
 fn discriminant_u32() {
-    const VOID_DISCRIMINANT: u32 = 3;
+    const VOID_DISCRIMINANT: i32 = 3;
 
     #[derive(Debug, Eq, PartialEq, Decode)]
     #[xdrs(switch = "i32")]

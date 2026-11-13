@@ -2,7 +2,8 @@ use std::fmt::Debug;
 
 use crate::{
     Decode, Decoder, Encode, Error, ExpectedSize, StdEncoder,
-    decode::Reference, padding_len,
+    decode::{DecodeDiscriminant, Reference},
+    padding_len,
 };
 
 #[track_caller]
@@ -66,6 +67,27 @@ where
     let mut decoder = TestSliceDecoder::new(&encoded);
 
     let actual = T::decode(&mut decoder).unwrap();
+    assert_eq!(actual, expected, "decoded value doesn't match");
+
+    let expected_read_len = decoder.len();
+    let actual_read_len = decoder.read_len();
+    assert_eq!(
+        actual_read_len, expected_read_len,
+        "read length doesn't match"
+    );
+}
+
+#[track_caller]
+pub fn assert_decode_discriminant<
+    'd,
+    T: DecodeDiscriminant<'d> + PartialEq + Debug,
+>(
+    input: &'d [u8],
+    expected: (Option<T>, i32),
+) {
+    let mut decoder = TestSliceDecoder::new(input);
+
+    let actual = T::decode_discriminant(&mut decoder).unwrap();
     assert_eq!(actual, expected, "decoded value doesn't match");
 
     let expected_read_len = decoder.len();

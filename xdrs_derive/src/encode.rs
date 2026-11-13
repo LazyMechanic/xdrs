@@ -1,6 +1,6 @@
 use darling::util::SpannedValue;
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::{Pat, parse_quote};
 
 use crate::{
@@ -107,6 +107,13 @@ fn impl_union(
 ) -> syn::Result<TokenStream> {
     validate_impl_union(input, data)?;
 
+    // SAFETY: impl_union() is called after the `switch` attribute has been checked.
+    let switch = input
+        .switch_attr
+        .as_ref()
+        .expect("missing `#[xdrs(switch = \"...\" )]` attribute");
+    let discriminant_ty = &***switch;
+
     pub fn get_variant_pat(
         v: &SpannedValue<VariantReceiver>,
     ) -> syn::Result<Pat> {
@@ -185,11 +192,18 @@ fn impl_union(
     let ident = &input.ident;
     let (impl_gen, type_gen, where_gen) = input.generics.split_for_impl();
 
+    let assert_discriminant = quote_spanned! {switch.span() =>
+        fn _assert_discriminant<T: _xdrs::Encode>() {}
+        _assert_discriminant::<#discriminant_ty>();
+    };
+
     let out = quote! {
         const _: () = {
             extern crate xdrs as _xdrs;
             impl #impl_gen _xdrs::Encode for #ident #type_gen #where_gen {
                 fn encode<__E: _xdrs::Encoder>(&self, encoder: &mut __E) -> _xdrs::macro_reexport::Result<(), __E::Error> {
+                    #assert_discriminant
+
                     match self {
                         #(#match_branches),*
                     }

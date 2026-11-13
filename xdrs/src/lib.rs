@@ -2,7 +2,6 @@ pub mod decode;
 pub mod encode;
 
 mod bounded;
-mod discriminant;
 mod error;
 
 #[cfg(any(test, feature = "__test_utils"))]
@@ -15,10 +14,9 @@ pub use xdrs_derive::{Decode, Discriminant, Encode};
 pub use crate::{
     bounded::Bounded,
     decode::{
-        Decode, DecodeError, DecodeOwned, Decoder, StdDecoder, from_reader,
-        from_slice,
+        Decode, DecodeDiscriminant, DecodeError, DecodeOwned, Decoder,
+        StdDecoder, from_reader, from_slice,
     },
-    discriminant::Discriminant,
     encode::{Encode, EncodeError, Encoder, StdEncoder, to_vec, to_writer},
     error::Error,
 };

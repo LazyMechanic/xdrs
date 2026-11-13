@@ -5,7 +5,7 @@ use bytes::Bytes;
 use crate::{
     ExpectedSize,
     decode::{
-        Decode, Reference,
+        Decode, DecodeDiscriminant, Reference,
         decoder::{DecodeError, Decoder},
     },
 };
@@ -32,6 +32,36 @@ impl_primitive!(
     f64 => decode_f64,
     bool => decode_bool,
 );
+
+impl<'d> DecodeDiscriminant<'d> for i32 {
+    fn decode_discriminant<D: Decoder<'d>>(
+        decoder: &mut D,
+    ) -> Result<(Option<Self>, i32), D::Error> {
+        let discr_orig = i32::decode(decoder)?;
+        Ok((Some(discr_orig), discr_orig))
+    }
+}
+
+impl<'d> DecodeDiscriminant<'d> for u32 {
+    fn decode_discriminant<D: Decoder<'d>>(
+        decoder: &mut D,
+    ) -> Result<(Option<Self>, i32), D::Error> {
+        let discr_i32 = i32::decode(decoder)?;
+        Ok((Some(discr_i32 as _), discr_i32))
+    }
+}
+
+impl<'d> DecodeDiscriminant<'d> for bool {
+    fn decode_discriminant<D: Decoder<'d>>(
+        decoder: &mut D,
+    ) -> Result<(Option<Self>, i32), D::Error> {
+        match decoder.decode_int()? {
+            0 => Ok((Some(false), 0)),
+            1 => Ok((Some(true), 1)),
+            other => Ok((None, other)),
+        }
+    }
+}
 
 impl<'d: 'a, 'a> Decode<'d> for &'a [u8] {
     fn decode<D: Decoder<'d>>(decoder: &mut D) -> Result<Self, D::Error> {
@@ -257,7 +287,29 @@ pub(crate) fn check_size<E: DecodeError>(
 mod tests {
 
     use super::*;
-    use crate::test_utils::assert_decode;
+    use crate::test_utils::{assert_decode, assert_decode_discriminant};
+
+    #[rustfmt::skip]
+    #[test]
+    fn decode_discriminant() {
+        assert_decode_discriminant::<i32>(&(-1i32).to_be_bytes(), (Some(-1i32), -1i32));
+        assert_decode_discriminant::<i32>(&2i32.to_be_bytes(), (Some(2i32), 2i32));
+        assert_decode_discriminant::<i32>(&3i32.to_be_bytes(), (Some(3i32), 3i32));
+        assert_decode_discriminant::<i32>(&251252114i32.to_be_bytes(), (Some(251252114i32), 251252114i32));
+        assert_decode_discriminant::<i32>(&i32::MAX.to_be_bytes(), (Some(i32::MAX), i32::MAX));
+        assert_decode_discriminant::<i32>(&i32::MIN.to_be_bytes(), (Some(i32::MIN), i32::MIN));
+
+        assert_decode_discriminant::<u32>(&(-1i32).to_be_bytes(), (Some(4294967295), -1i32));
+        assert_decode_discriminant::<u32>(&2i32.to_be_bytes(), (Some(2u32), 2i32));
+        assert_decode_discriminant::<u32>(&3i32.to_be_bytes(), (Some(3u32), 3i32));
+        assert_decode_discriminant::<u32>(&251252114i32.to_be_bytes(), (Some(251252114u32), 251252114i32));
+        assert_decode_discriminant::<u32>(&i32::MAX.to_be_bytes(), (Some(2147483647u32), i32::MAX));
+        assert_decode_discriminant::<u32>(&i32::MIN.to_be_bytes(), (Some(2147483648u32), i32::MIN));
+
+        assert_decode_discriminant::<bool>(&1i32.to_be_bytes(), (Some(true), 1i32));
+        assert_decode_discriminant::<bool>(&0i32.to_be_bytes(), (Some(false), 0i32));
+        assert_decode_discriminant::<bool>(&i32::MAX.to_be_bytes(), (None, i32::MAX));
+    }
 
     #[rustfmt::skip]
     #[test]
