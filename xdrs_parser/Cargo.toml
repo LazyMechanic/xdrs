@@ -1,0 +1,19 @@
+[package]
+name = "xdrs_parser"
+description = "XDR encoding (schema parser)"
+authors = ["LazyMechanic <asharnrus@gmail.com>"]
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+repository = "https://github.com/LazyMechanic/xdrs"
+documentation = "https://docs.rs/xdrs"
+keywords = ["xdr", "serialize", "encoding", "parsing"]
+categories = ["encoding", "parsing"]
+include = ["src/**/*.rs", "README.md", "LICENSE"]
+edition = "2024"
+
+
+[dependencies]
+logos = "0.16"
+miette = "7.6"
+thiserror = "2.0"
+winnow = "1.0"

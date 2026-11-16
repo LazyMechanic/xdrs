@@ -1,3 +1,3 @@
 [workspace]
 resolver = "3"
-members = ["xdrs", "xdrs_build", "xdrs_derive", "xdrs_test_suite"]
+members = ["xdrs", "xdrs_parser", "xdrs_build", "xdrs_derive", "xdrs_test_suite"]
