@@ -96,10 +96,49 @@ mod union_body;
 mod union_type_spec;
 mod value;
 
-use crate::{ast::Ast, error::ParseError, token::SpannedToken};
+mod ident;
+mod token;
+mod utils;
 
-pub(crate) fn parse_tokens(
-    tokens: Vec<SpannedToken<'_>>,
-) -> Result<Ast, ParseError> {
-    todo!()
+use std::ops::Range;
+
+use winnow::Parser;
+
+use crate::{
+    error::{ParseError, SyntaxError},
+    syntax::specification::Specification,
+    token::TokenStream,
+};
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Ast<'t> {
+    pub specification: Specification<'t>,
+}
+
+pub(crate) fn parse_tokens<'a, 't>(
+    input: &mut TokenStream<'a, 't>,
+) -> Result<Ast<'t>, ParseError> {
+    let specification = Specification.parse(input).map_err(|err| {
+        let token_idx = err.offset();
+
+        let byte_span: Range<usize> = if let Some(tok) = input.get(token_idx) {
+            tok.span().clone()
+        } else if let Some(last_tok) = input.last() {
+            last_tok.span().end..last_tok.span().end
+        } else {
+            // No input
+            0..0
+        };
+
+        let span = byte_span.into();
+
+        let mut message = err.inner().to_string();
+        if message.is_empty() {
+            message = "syntax error".into();
+        }
+
+        SyntaxError { span, message }
+    })?;
+
+    Ok(Ast { specification })
 }

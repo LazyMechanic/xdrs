@@ -11,7 +11,7 @@ pub enum ParseError {
     Tokenize(#[from] TokenizeError),
 
     #[error("syntax error")]
-    Syntax(#[related] Vec<SyntaxError>),
+    Syntax(#[from] SyntaxError),
 }
 
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]

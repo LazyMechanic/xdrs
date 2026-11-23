@@ -1,15 +1,15 @@
-pub mod ast;
 pub mod error;
+pub mod syntax;
 pub mod token;
 
-mod syntax;
-
 use crate::{
-    ast::Ast, error::ParseError, syntax::parse_tokens, token::tokenize,
+    error::ParseError,
+    syntax::{Ast, parse_tokens},
+    token::tokenize,
 };
 
-pub fn parse_schema(input: &str) -> Result<Ast, ParseError> {
+pub fn parse_schema(input: &str) -> Result<Ast<'_>, ParseError> {
     let tokens = tokenize(input)?;
-    let ast = parse_tokens(tokens)?;
+    let ast = parse_tokens(&mut tokens.as_slice())?;
     Ok(ast)
 }
