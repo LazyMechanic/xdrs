@@ -1,14 +1,9 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub mod builder;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod hir;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+use crate::builder::Builder;
+
+pub fn configure() -> Builder {
+    Builder::new()
 }
